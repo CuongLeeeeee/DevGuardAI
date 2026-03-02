@@ -1,0 +1,6 @@
+@DevGuardAI.API_HostAddress = http://localhost:5125
+
+GET {{DevGuardAI.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
