@@ -31,7 +31,7 @@ builder.Services.AddSwaggerGen(options =>
         Description = "AI Code Review & Test Case Generation"
     });
 });
-
+builder.Services.AddHttpClient();
 // DbContext
 builder.Services.AddDbContext<DevGuardAIDbContext>(options =>
     options.UseSqlServer(
@@ -42,6 +42,7 @@ builder.Services.AddDbContext<DevGuardAIDbContext>(options =>
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IGeminiService, GeminiService>();
 
 
 // Authentication
