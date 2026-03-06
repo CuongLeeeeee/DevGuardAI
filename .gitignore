@@ -43,7 +43,8 @@ tmp/
 *.env
 .env.*
 secrets.json
-
+appsettings.json
+appsettings.Development.json
 # ======================
 # OS specific
 # ======================
