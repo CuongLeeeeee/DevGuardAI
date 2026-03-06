@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 
@@ -7,10 +8,12 @@ using System.Text.Json;
 public class ReviewController : ControllerBase
 {
     private readonly IGeminiService _service;
+    private readonly IChatService _chatService;
 
-    public ReviewController(IGeminiService service)
+    public ReviewController(IGeminiService service, IChatService chatService)
     {
         _service = service;
+        _chatService = chatService;
     }
 
     [HttpPost]
@@ -21,6 +24,14 @@ public class ReviewController : ControllerBase
 
         var result = await _service.ReviewCode(request.Content);
 
+        return Ok(result);
+    }
+
+    // Controller
+    [HttpPost("conversation")]
+    public async Task<IActionResult> ReviewConversation([FromBody] ConversationRequest request)
+    {
+        var result = await _service.ReviewWithContext(request.SessionId, request.Content);
         return Ok(result);
     }
 

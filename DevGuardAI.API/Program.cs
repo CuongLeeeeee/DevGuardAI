@@ -1,9 +1,10 @@
-using DevGuardAI.DAL.Data;
+﻿using DevGuardAI.DAL.Data;
 using DevGuardAI.DAL.Interfaces;
 using DevGuardAI.DAL.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,32 +21,72 @@ var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 // =========================
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen(options =>
+// OpenAPI (required for Scalar)
+builder.Services.AddOpenApi(options =>
 {
-    options.SwaggerDoc("v1", new()
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        Title = "DevGuardAI API",
-        Version = "v1",
-        Description = "AI Code Review & Test Case Generation"
+        document.Components ??= new();
+
+        document.Components.SecuritySchemes["Bearer"] =
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                Name = "Authorization",
+                Description = "Enter JWT token"
+            };
+
+        document.SecurityRequirements.Add(
+            new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+            {
+                {
+                    new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                    {
+                        Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                        {
+                            Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                            Id = "Bearer"
+                        }
+                    },
+                    new List<string>()
+                }
+            });
+
+        return Task.CompletedTask;
     });
 });
-builder.Services.AddHttpClient();
-// DbContext
+
+// =========================
+// DATABASE
+// =========================
+
 builder.Services.AddDbContext<DevGuardAIDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection")
     ));
+// register HttpClient
+builder.Services.AddHttpClient();
 
-// JWT Service
+// =========================
+// DEPENDENCY INJECTION
+// =========================
+
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IChatMessagesRepository, ChatMessagesRepository>();
+builder.Services.AddScoped<IChatSessionsRepository, ChatSessionsRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IGeminiService, GeminiService>();
+builder.Services.AddScoped<IChatService, ChatService>();
 
+// =========================
+// AUTHENTICATION (JWT)
+// =========================
 
-// Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -55,14 +96,17 @@ builder.Services.AddAuthentication(options =>
 {
     options.RequireHttpsMetadata = false;
     options.SaveToken = true;
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
+
         IssuerSigningKey = new SymmetricSecurityKey(key)
     };
 });
@@ -79,21 +123,21 @@ var app = builder.Build();
 // MIDDLEWARE
 // =========================
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "DevGuardAI API v1");
-        c.RoutePrefix = string.Empty;
-    });
-}
-
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// OpenAPI document
+app.MapOpenApi();
+
+// Scalar API UI
+app.MapScalarApiReference(options =>
+{
+    options.Title = "DevGuardAI API";
+    options.Theme = ScalarTheme.BluePlanet;
+});
 
 app.Run();

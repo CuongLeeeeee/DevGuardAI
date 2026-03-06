@@ -4,6 +4,7 @@ using DevGuardAI.DAL.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DevGuardAI.DAL.Migrations
 {
     [DbContext(typeof(DevGuardAIDbContext))]
-    partial class DevGuardAIDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260306140432_AddChatSessionContext")]
+    partial class AddChatSessionContext
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -56,6 +59,7 @@ namespace DevGuardAI.DAL.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ContextSummary")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")

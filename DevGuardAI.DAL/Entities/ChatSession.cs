@@ -10,6 +10,11 @@ public class ChatSession
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public string? ContextSummary { get; set; } = string.Empty;
+
+    public string SessionType { get; set; } = "Review";
+    // "Review" | "TestCase"
+
     // Navigation
     public User User { get; set; } = null!;
     public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
