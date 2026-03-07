@@ -22,6 +22,20 @@ var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
 builder.Services.AddControllers();
 
+// CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000"   // React
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 // OpenAPI (required for Scalar)
 builder.Services.AddOpenApi(options =>
 {
@@ -124,6 +138,8 @@ var app = builder.Build();
 // =========================
 
 app.UseHttpsRedirection();
+
+app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
