@@ -1,0 +1,48 @@
+# =============================================================
+# DevGuardAI — .dockerignore
+# Giảm Docker build context → build nhanh hơn, image nhỏ hơn
+# =============================================================
+
+# ── Build artifacts ─────────────────────────────────────────
+**/bin/
+**/obj/
+**/out/
+
+# ── Git ──────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── IDE / Editor ─────────────────────────────────────────────
+.vs/
+.vscode/
+*.user
+*.suo
+*.DotSettings
+
+# ── Logs & Temp ──────────────────────────────────────────────
+**/logs/
+**/log/
+*.log
+
+# ── Docker files (không cần copy vào image) ──────────────────
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# ── Secrets — KHÔNG BAO GIỜ đưa vào image ───────────────────
+.env
+*.env
+**/secrets/
+
+# ── Test projects (không cần trong production image) ─────────
+**/*.Tests/
+**/*.Test/
+**/TestResults/
+
+# ── NuGet cache local ────────────────────────────────────────
+**/.nuget/
+**/packages/
+
+# ── README & docs ────────────────────────────────────────────
+*.md
+docs/

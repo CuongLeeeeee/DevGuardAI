@@ -1,0 +1,75 @@
+# =============================================================
+# DevGuardAI — docker-compose.yml
+# Đặt file này tại ROOT của solution (cùng cấp với .sln)
+# Yêu cầu: tạo file .env từ .env.example trước khi chạy
+# =============================================================
+
+services:
+
+  # ── SQL Server 2022 ─────────────────────────────────────────
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: devguardai-sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${DB_PASSWORD}"
+      MSSQL_PID: "Developer"            # License miễn phí cho dev/test
+    ports:
+      - "1433:1433"                     # Map ra host → kết nối bằng SSMS bình thường
+    volumes:
+      - sqlserver_data:/var/opt/mssql   # Persist data
+    healthcheck:
+      test: >
+        /opt/mssql-tools18/bin/sqlcmd
+        -S localhost -U sa -P "$$MSSQL_SA_PASSWORD"
+        -Q "SELECT 1" -No
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── DevGuardAI API ──────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devguardai-api
+    restart: unless-stopped
+    depends_on:
+      sqlserver:
+        condition: service_healthy      # Chỉ khởi động sau khi SQL Server sẵn sàng
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+      # ── Connection String ──────────────────────────────────
+      # Dùng tên service "sqlserver" thay vì localhost
+      ConnectionStrings__DefaultConnection: >
+        Server=sqlserver,1433;
+        Database=DevGuardAIDB;
+        User Id=sa;
+        Password=${DB_PASSWORD};
+        TrustServerCertificate=True;
+        MultipleActiveResultSets=True;
+
+      # ── JWT ────────────────────────────────────────────────
+      Jwt__Key: "${JWT_KEY}"
+      Jwt__Issuer: "${JWT_ISSUER}"
+      Jwt__Audience: "${JWT_AUDIENCE}"
+      Jwt__ExpireMinutes: "${JWT_EXPIRE_MINUTES}"
+
+      # ── Gemini AI ──────────────────────────────────────────
+      Gemini__ApiKey: "${GEMINI_API_KEY}"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  sqlserver_data:
+    name: devguardai_sqlserver_data

@@ -15,7 +15,7 @@ public class TestCaseController : ControllerBase
         _chatService = chatService;
     }
 
-    [HttpPost("generate")]
+    [HttpPost]
     public async Task<IActionResult> Generate(ContentRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Content))

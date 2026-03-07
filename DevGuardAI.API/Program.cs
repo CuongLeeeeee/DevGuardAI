@@ -120,6 +120,28 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // =========================
+// AUTO MIGRATION
+// =========================
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DevGuardAIDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        logger.LogInformation("Applying database migrations...");
+        db.Database.Migrate();
+        logger.LogInformation("Database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while applying database migrations.");
+        throw;
+    }
+}
+
+// =========================
 // MIDDLEWARE
 // =========================
 
