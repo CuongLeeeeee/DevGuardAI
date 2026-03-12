@@ -61,10 +61,10 @@ public class GeminiService : IGeminiService
 
         var result = ParseReviewResponse(text);
 
-        var aiContent = (result.Review is not null
-                        ? System.Text.Json.JsonSerializer.Serialize(result.Review)
-                        ?? result.Answer
-                        : string.Empty);
+        var aiContent = result.Review is not null
+            ? System.Text.Json.JsonSerializer.Serialize(result.Review)
+            : result.Answer ?? string.Empty;
+            
         await _chatService.SaveTurnAsync(sessionId, userInput, aiContent);
         await _chatService.UpdateContextSummaryAsync(sessionId, result.UpdatedContextSummary);
 
