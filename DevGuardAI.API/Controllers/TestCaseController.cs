@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using DevGuardAI.BLL.Exceptions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -16,13 +17,12 @@ public class TestCaseController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Generate(ContentRequest request)
+    public async Task<IActionResult> Generate([FromBody] ContentRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Content))
-            return BadRequest("Code is required");
+            throw new ValidationException("content", "Code is required.");
 
         var result = await _service.GenerateTestCases(request.Content);
-
         return Ok(result);
     }
 
@@ -31,25 +31,26 @@ public class TestCaseController : ControllerBase
     public async Task<IActionResult> GenerateConversation([FromBody] ConversationRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Content))
-            return BadRequest("Code is required");
+            throw new ValidationException("content", "Code is required.");
 
         var userId = GetUserIdFromToken();
 
-        // Verify session thuộc về user đang login
         var session = await _chatService.GetSessionWithMessagesAsync(request.SessionId);
-        if (session == null || session.UserId != userId)
-            return Forbid();
+        if (session == null)
+            throw new NotFoundException("ChatSession", request.SessionId);
+
+        if (session.UserId != userId)
+            throw new ForbiddenException();
 
         var result = await _service.GenerateTestCasesWithContext(request.SessionId, request.Content);
         return Ok(result);
     }
+
     private Guid GetUserIdFromToken()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
         if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        {
-            throw new UnauthorizedAccessException("User ID not found in token.");
-        }
+            throw new UnauthorizedException("User ID not found in token.");
         return userId;
     }
 }

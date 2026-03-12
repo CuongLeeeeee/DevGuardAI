@@ -1,4 +1,5 @@
-﻿using DevGuardAI.DAL.Data;
+﻿using DevGuardAI.API.Middleware;
+using DevGuardAI.DAL.Data;
 using DevGuardAI.DAL.Interfaces;
 using DevGuardAI.DAL.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,8 +22,11 @@ var key = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 // SERVICES
 // =========================
 
-builder.Services.AddControllers();
-
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -82,6 +87,7 @@ builder.Services.AddDbContext<DevGuardAIDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection")
     ));
+
 // register HttpClient
 builder.Services.AddHttpClient();
 
@@ -158,6 +164,9 @@ using (var scope = app.Services.CreateScope())
 // =========================
 // MIDDLEWARE
 // =========================
+
+// Phải là middleware đầu tiên để bắt exception từ toàn bộ pipeline
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
 

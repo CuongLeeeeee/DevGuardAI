@@ -1,4 +1,6 @@
-﻿using DevGuardAI.DAL.Entities;
+﻿using Azure.Core;
+using DevGuardAI.BLL.Exceptions;
+using DevGuardAI.DAL.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -37,8 +39,11 @@ public class ChatController : ControllerBase
         var userId = GetUserIdFromToken();
 
         var session = await _chatService.GetSessionWithMessagesAsync(sessionId);
-        if (session == null || session.UserId != userId)
-            return Forbid();
+        if (session == null)
+            throw new NotFoundException("ChatSession", sessionId);
+
+        if (session.UserId != userId)
+            throw new ForbiddenException();
 
         return Ok(session.Messages
     .OrderBy(m => m.CreatedAt)

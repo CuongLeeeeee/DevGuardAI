@@ -1,4 +1,5 @@
-﻿using DevGuardAI.BLL.PromptBuilders;
+﻿using DevGuardAI.BLL.Exceptions;
+using DevGuardAI.BLL.PromptBuilders;
 using DevGuardAI.DAL.Entities;
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json;
@@ -26,7 +27,7 @@ public class GeminiService : IGeminiService
     }
 
     // -------------------------------------------------------------------------
-    // Single-shot (không có conversation context) — giữ nguyên như cũ
+    // Single-shot
     // -------------------------------------------------------------------------
 
     public async Task<ReviewResult?> ReviewCode(string content)
@@ -34,7 +35,7 @@ public class GeminiService : IGeminiService
         var prompt = PromptBuilder.BuildSystemPrompt()
                    + PromptBuilder.BuildUserPrompt(content);
 
-        var text = await CallGeminiAsync(prompt, maxOutputTokens: 2000);
+        var text = await CallGeminiAsync(prompt, maxOutputTokens: 5000);
         return JsonSerializer.Deserialize<ReviewResult>(text, _jsonOptions);
     }
 
@@ -43,7 +44,7 @@ public class GeminiService : IGeminiService
         var prompt = PromptBuilder.BuildTestCaseSystemPrompt()
                    + PromptBuilder.BuildUserPrompt(content);
 
-        var text = await CallGeminiAsync(prompt, maxOutputTokens: 4000);
+        var text = await CallGeminiAsync(prompt, maxOutputTokens: 5000);
         return JsonSerializer.Deserialize<TestCaseResult>(text, _jsonOptions);
     }
 
@@ -53,20 +54,17 @@ public class GeminiService : IGeminiService
 
     public async Task<ConversationReviewResult> ReviewWithContext(Guid sessionId, string userInput)
     {
-        // 1. Lấy context từ DB
         var (history, contextSummary) = await GetContextFromDb(sessionId);
 
-        // 2. Build prompt
         var prompt = PromptBuilder.BuildConversationPrompt(userInput, contextSummary, history);
+        var text = await CallGeminiAsync(prompt, maxOutputTokens: 5000);
 
-        // 3. Gọi Gemini
-        var text = await CallGeminiAsync(prompt, maxOutputTokens: 3000);
-
-        // 4. Parse response
         var result = ParseReviewResponse(text);
 
-        // 5. Lưu turn + cập nhật summary xuống DB
-        var aiContent = result.Review?.Summary ?? result.Answer ?? string.Empty;
+        var aiContent = (result.Review is not null
+                        ? System.Text.Json.JsonSerializer.Serialize(result.Review)
+                        ?? result.Answer
+                        : string.Empty);
         await _chatService.SaveTurnAsync(sessionId, userInput, aiContent);
         await _chatService.UpdateContextSummaryAsync(sessionId, result.UpdatedContextSummary);
 
@@ -79,22 +77,16 @@ public class GeminiService : IGeminiService
 
     public async Task<ConversationTestCaseResult> GenerateTestCasesWithContext(Guid sessionId, string userInput)
     {
-        // 1. Lấy context từ DB
         var (history, contextSummary) = await GetContextFromDb(sessionId);
 
-        // 2. Build prompt
         var prompt = PromptBuilder.BuildConversationTestCasePrompt(userInput, contextSummary, history);
+        var text = await CallGeminiAsync(prompt, maxOutputTokens: 5000);
 
-        // 3. Gọi Gemini
-        var text = await CallGeminiAsync(prompt, maxOutputTokens: 4000);
-
-        // 4. Parse response
         var result = ParseTestCaseResponse(text);
 
-        // 5. Lưu turn + cập nhật summary xuống DB
-        var aiContent = result.Answer
-                     ?? result.TestCases?.TestCases?.FirstOrDefault()?.Description
-                     ?? string.Empty;
+        var aiContent = result.TestCases?.TestCases is { Count: > 0 }
+    ? System.Text.Json.JsonSerializer.Serialize(result.TestCases.TestCases)
+    : result.Answer ?? string.Empty;
         await _chatService.SaveTurnAsync(sessionId, userInput, aiContent);
         await _chatService.UpdateContextSummaryAsync(sessionId, result.UpdatedContextSummary);
 
@@ -105,16 +97,13 @@ public class GeminiService : IGeminiService
     // Private helpers
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Lấy 6 messages gần nhất và contextSummary của session từ DB,
-    /// map sang ConversationTurn để truyền vào PromptBuilder.
-    /// </summary>
-    private async Task<(IEnumerable<ConversationTurn> history, string? contextSummary)> GetContextFromDb(Guid sessionId)
+    private async Task<(IEnumerable<ConversationTurn> history, string? contextSummary)>
+        GetContextFromDb(Guid sessionId)
     {
         var session = await _chatService.GetSessionWithMessagesAsync(sessionId);
 
         if (session == null)
-            throw new KeyNotFoundException($"Session {sessionId} not found.");
+            throw new NotFoundException("ChatSession", sessionId);
 
         var history = session.Messages
             .OrderBy(m => m.CreatedAt)
@@ -128,10 +117,6 @@ public class GeminiService : IGeminiService
         return (history, session.ContextSummary);
     }
 
-    /// <summary>
-    /// Parse JSON response của Gemini cho conversation review.
-    /// Phân biệt "review" và "followup" dựa vào field "type".
-    /// </summary>
     private ConversationReviewResult ParseReviewResponse(string text)
     {
         using var doc = JsonDocument.Parse(text);
@@ -152,7 +137,6 @@ public class GeminiService : IGeminiService
             };
         }
 
-        // type == "review"
         return new ConversationReviewResult
         {
             Review = JsonSerializer.Deserialize<ReviewResult>(text, _jsonOptions),
@@ -160,10 +144,6 @@ public class GeminiService : IGeminiService
         };
     }
 
-    /// <summary>
-    /// Parse JSON response của Gemini cho conversation test case.
-    /// Phân biệt "testcases" và "followup" dựa vào field "type".
-    /// </summary>
     private ConversationTestCaseResult ParseTestCaseResponse(string text)
     {
         using var doc = JsonDocument.Parse(text);
@@ -184,7 +164,6 @@ public class GeminiService : IGeminiService
             };
         }
 
-        // type == "testcases"
         return new ConversationTestCaseResult
         {
             TestCases = JsonSerializer.Deserialize<TestCaseResult>(text, _jsonOptions),
@@ -193,9 +172,10 @@ public class GeminiService : IGeminiService
     }
 
     /// <summary>
-    /// Gọi Gemini API và trả về raw text từ response.
+    /// Calls the Gemini API and returns the raw text response.
+    /// Throws <see cref="GeminiApiException"/> on non-success HTTP status.
     /// </summary>
-    private async Task<string> CallGeminiAsync(string prompt, int maxOutputTokens = 2000)
+    private async Task<string> CallGeminiAsync(string prompt, int maxOutputTokens = 5000)
     {
         var apiKey = _config["Gemini:ApiKey"];
 
@@ -218,17 +198,24 @@ public class GeminiService : IGeminiService
             requestBody);
 
         if (!response.IsSuccessStatusCode)
-            throw new Exception($"Gemini API error: {response.StatusCode}");
+            throw new GeminiApiException(response.StatusCode);
 
         var json = await response.Content.ReadAsStringAsync();
         await Task.Delay(500);
 
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement
-            .GetProperty("candidates")[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString()!;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString()!;
+        }
+        catch (Exception ex)
+        {
+            throw new GeminiApiException($"Failed to parse Gemini response: {ex.Message}");
+        }
     }
 }
